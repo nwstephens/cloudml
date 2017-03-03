@@ -3,6 +3,8 @@ title: "Census Data Analysis"
 output: html_notebook
 ---
 
+# Overview
+
 Predict whether income exceeds $50K/yr based on census data. Also known as "Adult" dataset.
 
 * 1994 Study
@@ -10,7 +12,26 @@ Predict whether income exceeds $50K/yr based on census data. Also known as "Adul
 * [Data source](https://archive.ics.uci.edu/ml/datasets/Census+Income)
 * [Data description](https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.names)
 
-```{r}
+# Outline
+
+* an Rmd for visualizations/EDA of the raw dataset
+* then perhaps an Rmd making predictions
+* then perhaps a Shiny app making predictions
+
+**Notes:**
+* it would be cool if we used plotly as that would give us some very nice interactive artifcats
+* Important: The training in the demo will occur as an async cloudml job rather than something that happens inline in an Rmd.
+
+```{r setup, message=FALSE}
+library(tidyverse)
+library(plotly)
+library(pROC)
+library(glmnet)
+```
+
+# Download
+
+```{r, eval=FALSE}
 download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", "train_file")
 download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test", "test_file")
 
@@ -18,9 +39,9 @@ download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/a
 #download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.test", "test_file")
 ```
 
-```{r}
-library(readr)
+# Read Data
 
+```{r}
 col_names = c(
   "age", "workclass", "fnlwgt", "education", "education_num",
   "marital_status", "occupation", "relationship", "race", "gender",
@@ -32,60 +53,143 @@ train_raw <- read_csv("train_file", col_names = col_names, na = "?")
 test_raw  <- read_csv("train_file", col_names = col_names, na = "?")
 ```
 
-```{r}
-library(dplyr)
+# Create modeling data
 
-train <- train_raw %>%
-  mutate(label = ifelse(income_bracket == ">50K", 1, 0)) %>%
-  mutate(age_buckets = cut(age, c(16, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 90))) %>%
-  mutate(education_x_occupation = paste(education, occupation, sep = ":")) %>%
-  mutate(age_buckets_x_education_x_occupation = paste(age_buckets, education, occupation, sep = ":")) %>%
-  select(label, gender, native_country, education, occupation, workclass, marital_status, 
-         race, age_buckets, education_x_occupation, age_buckets_x_education_x_occupation) %>%
-  na.omit
+```{r}
+format.rawdata <- function(data){
+  data %>%
+    mutate(label = ifelse(income_bracket == ">50K", 1, 0)) %>%
+    mutate(age_buckets = cut(age, c(16, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 90))) %>%
+    mutate(education_x_occupation = paste(education, occupation, sep = ":")) %>%
+    mutate(age_buckets_x_education_x_occupation = paste(age_buckets, education, occupation, sep = ":")) %>%
+    select(label, gender, native_country, education, occupation, workclass, marital_status, 
+           race, age_buckets, education_x_occupation, age_buckets_x_education_x_occupation,
+           education_num) %>%
+    na.omit
+}
+
+train <- format.rawdata(train_raw)
+test <- format.rawdata(test_raw)
+
 ```
 
-```{r}
-train %>%
-  group_by(education) %>%
-  count()
+# Plot categorical columns
 
+* workclass
+* education
+* marital_status
+* occupation
+* relationship
+* race
+* gender
+* native_country"
+
+```{r}
+plot.main.effects <- function(data, x, y){
+  p <- data %>%
+    mutate_(group = x, metric = y) %>%
+    group_by(group) %>%
+    summarize(percent = 100 * mean(metric)) %>%
+    ggplot(aes(x = reorder(group, percent), percent)) +
+    geom_bar(stat="identity") +
+    coord_flip() +
+    labs(y = "Percent", x = "") +
+    ggtitle(paste("Percent surveyed with incomes over $50k by", x))
+  ggplotly(p)
+}
+
+plot.main.effects(train, "marital_status", "label")
+plot.main.effects(train, "gender", "label")
+plot.main.effects(train, "education", "label")
+```
+
+# Plot continuous columns
+
+* age
+* education_num
+* capital_gain
+* capital_loss
+* hours_per_week
+
+```{r}
+train_raw %>%
+  na.omit %>%
+  select(income_bracket, age, education_num, capital_gain, capital_loss, hours_per_week) %>%
+  gather(column, val, -income_bracket) %>%
+  filter(column == "age") %>%
+  ggplot(aes(val, fill = income_bracket)) + geom_density()
+
+plot.continuous <- function(data, x, y, alpha = 0.2, ...){
+  data %>%
+    select_(groups = x, y = y) %>%
+    na.omit %>%
+    ggplot(aes(y, fill = groups)) + geom_density(alpha = alpha, ...) +
+    labs(x = y, y = "") +
+    ggtitle(paste(y, "by", x))
+}
+
+# People who earn more also work more, are better educated, and are older
+plot.continuous(train_raw, "income_bracket", "age")
+plot.continuous(train_raw, "income_bracket", "education_num", adjust = 5)
+plot.continuous(train_raw, "income_bracket", "hours_per_week", adjust = 5)
+
+```
+
+
+# Plot interactions
+
+```{r}
+p <- train %>%
+  select(education_num, age_buckets, label) %>%
+  group_by(age_buckets, education_num) %>%
+  summarize(percent = 100 * mean(label)) %>%
+  ggplot(aes(education_num, age_buckets, fill = percent)) +
+  geom_tile() +
+  labs(x = "Education", y = "Age") +
+  ggtitle("Percent surveyed with incomes over $50k by age, education")
+ggplotly(p)
+
+p <- train %>%
+  select(age_buckets, education_num, occupation, label) %>%
+  group_by(age_buckets, education_num, occupation) %>%
+  summarize(percent = 100 * mean(label)) %>%
+  ggplot(aes(education_num, age_buckets, fill = percent)) +
+  geom_tile() +
+  facet_wrap( ~ occupation) +
+  labs(x = "Education", y = "Age") +
+  ggtitle("Percent surveyed with incomes over $50k by age, education, and occupation")
+ggplotly(p)
+
+```
+
+
+## Train Model
+
+Gender, education, and marital status are all highly significant. Marrital status in particular is a good predictor of those earning more than $50k.
+
+```{r}
 m1 <- glm(label ~ gender + native_country + education + occupation + workclass + marital_status +  
          race + age_buckets, binomial, train)
 summary(m1)
-anova(m1)
-# look at gender, education, marital_status
-# visualize country and occupation
-# married is huge!
+anova(m1) # takes a while to run
+plot(m1)
 ```
 
-```
-# Label
-0/1
+## Predict
 
-# CATEGORICAL_COLUMNS
-["workclass", "education", "marital_status", "occupation", "relationship", "race", "gender", "native_country"]
-# CONTINUOUS_COLUMNS
-["age", "education_num", "capital_gain", "capital_loss", "hours_per_week"]
+The high area under the curve (AUC) of 0.9 is an indicator that this model is probably overfitting. 
 
-# Bucket age
-age_buckets = tf.contrib.layers.bucketized_column(age, boundaries=[18, 25, 30, 35, 40, 45, 50, 55, 60, 65])
-
-# Interactions
-education_x_occupation = tf.contrib.layers.crossed_column([education, occupation], hash_bucket_size=int(1e4))
-age_buckets_x_education_x_occupation = tf.contrib.layers.crossed_column(
-  [age_buckets, education, occupation], hash_bucket_size=int(1e6))
-
-# Model
-model_dir = tempfile.mkdtemp()
-m = tf.contrib.learn.LinearClassifier(feature_columns=[
-  gender, native_country, education, occupation, workclass, marital_status, race,
-  age_buckets, education_x_occupation, age_buckets_x_education_x_occupation],
-  model_dir=model_dir)
-  
-bias
-holdout
-regularization: L1 and L2 - elastic net
+```{r}
+test %>%
+  mutate(pred = predict(m1, ., type = "response")) %>%
+  roc(label ~ pred, .) %>%
+  plot.roc(., print.auc = TRUE) # maybe add accuracy like the TF example
 ```
 
+## Regularize
 
+```{r}
+# use L1 and L2 elastic net
+```
+
+## Make shiny app

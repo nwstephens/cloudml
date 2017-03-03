@@ -1,5 +1,6 @@
 library(tensorflow)
 
+setwd("~/projects/cloudml/inst/examples/census/")
 source("model.R")
 
 # Define some aliases for commonly-used modules

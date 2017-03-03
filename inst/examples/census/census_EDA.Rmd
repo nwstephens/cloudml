@@ -1,0 +1,91 @@
+---
+title: "Census Data Analysis"
+output: html_notebook
+---
+
+Predict whether income exceeds $50K/yr based on census data. Also known as "Adult" dataset.
+
+* 1994 Study
+* [Tensorflow](https://www.tensorflow.org/tutorials/wide)
+* [Data source](https://archive.ics.uci.edu/ml/datasets/Census+Income)
+* [Data description](https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.names)
+
+```{r}
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", "train_file")
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test", "test_file")
+
+#download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.data", "train_file")
+#download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.test", "test_file")
+```
+
+```{r}
+library(readr)
+
+col_names = c(
+  "age", "workclass", "fnlwgt", "education", "education_num",
+  "marital_status", "occupation", "relationship", "race", "gender",
+  "capital_gain", "capital_loss", "hours_per_week", "native_country",
+  "income_bracket"
+)
+
+train_raw <- read_csv("train_file", col_names = col_names, na = "?")
+test_raw  <- read_csv("train_file", col_names = col_names, na = "?")
+```
+
+```{r}
+library(dplyr)
+
+train <- train_raw %>%
+  mutate(label = ifelse(income_bracket == ">50K", 1, 0)) %>%
+  mutate(age_buckets = cut(age, c(16, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 90))) %>%
+  mutate(education_x_occupation = paste(education, occupation, sep = ":")) %>%
+  mutate(age_buckets_x_education_x_occupation = paste(age_buckets, education, occupation, sep = ":")) %>%
+  select(label, gender, native_country, education, occupation, workclass, marital_status, 
+         race, age_buckets, education_x_occupation, age_buckets_x_education_x_occupation) %>%
+  na.omit
+```
+
+```{r}
+train %>%
+  group_by(education) %>%
+  count()
+
+m1 <- glm(label ~ gender + native_country + education + occupation + workclass + marital_status +  
+         race + age_buckets, binomial, train)
+summary(m1)
+anova(m1)
+# look at gender, education, marital_status
+# visualize country and occupation
+# married is huge!
+```
+
+```
+# Label
+0/1
+
+# CATEGORICAL_COLUMNS
+["workclass", "education", "marital_status", "occupation", "relationship", "race", "gender", "native_country"]
+# CONTINUOUS_COLUMNS
+["age", "education_num", "capital_gain", "capital_loss", "hours_per_week"]
+
+# Bucket age
+age_buckets = tf.contrib.layers.bucketized_column(age, boundaries=[18, 25, 30, 35, 40, 45, 50, 55, 60, 65])
+
+# Interactions
+education_x_occupation = tf.contrib.layers.crossed_column([education, occupation], hash_bucket_size=int(1e4))
+age_buckets_x_education_x_occupation = tf.contrib.layers.crossed_column(
+  [age_buckets, education, occupation], hash_bucket_size=int(1e6))
+
+# Model
+model_dir = tempfile.mkdtemp()
+m = tf.contrib.learn.LinearClassifier(feature_columns=[
+  gender, native_country, education, occupation, workclass, marital_status, race,
+  age_buckets, education_x_occupation, age_buckets_x_education_x_occupation],
+  model_dir=model_dir)
+  
+bias
+holdout
+regularization: L1 and L2 - elastic net
+```
+
+

@@ -1,0 +1,145 @@
+---
+title: "Census profile"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(ggplot2)
+library(dplyr)
+dat <- mtcars %>%
+  group_by(carb) %>%
+  count %>%
+  arrange(desc(n)) %>%
+  top_n(3)
+p <- ggplot(dat, aes(reorder(carb, n), n)) + geom_bar(stat="Identity") + coord_flip() + labs(x = "", y = "")
+```
+
+Sidebar {.sidebar}
+=======================================================================
+
+Who are the people likely to make over \$50k? Use the dashboard to profile individuals more or less likely to earn over \$50k in yearly income. Estimates are made from a predictive model. Data come from the 1994 and 1995 current population surveys conducted by the U.S. Census Bureau. [data source](https://archive.ics.uci.edu/ml/datasets/Census+Income)
+
+
+
+```{r}
+sliderInput("bw_adjust", label = "Predicted probability",
+            min = 0, max = 1, value = 0.5, step = 0.05)
+
+numericInput("obs", "Number of responders", 1000, min = 100, max = 5000)
+```
+
+Predictors
+=======================================================================
+
+Row
+-----------------------------------------------------------------------
+
+### Accuracy {.value-box}
+
+accuracy = (true positive + true negative) / (total population)
+
+```{r}
+gauge(35, min = 0, max = 100, symbol = '%', gaugeSectors(
+  success = c(80, 100), warning = c(40, 79), danger = c(0, 39)
+))
+```
+
+### Sensitivity {.value-box}
+sensitivity = (true positive) / (positive)
+
+```{r}
+gauge(85, min = 0, max = 100, symbol = '%', gaugeSectors(
+  success = c(80, 100), warning = c(40, 79), danger = c(0, 39)
+))
+```
+
+### Specificity {.value-box}
+specificity = (true negative) / (negative)
+
+```{r}
+gauge(50, min = 0, max = 100, symbol = '%', gaugeSectors(
+  success = c(80, 100), warning = c(40, 79), danger = c(0, 39)
+))
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Workclass
+
+```{r}
+p
+```
+
+### Education
+
+```{r}
+p
+```
+
+### Marital Status
+
+```{r}
+p
+```
+
+### Occupation
+
+```{r}
+p
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Relationship
+
+```{r}
+p
+```
+
+### Race
+
+```{r}
+p
+```
+
+### Gender
+
+```{r}
+p
+```
+
+### Native Country
+
+```{r}
+p
+```
+
+
+Model Output
+=======================================================================
+
+### Logistic regression
+
+```{r}
+455
+```
+
+
+Data
+=======================================================================
+
+### Selected responders
+
+```{r}
+455
+```

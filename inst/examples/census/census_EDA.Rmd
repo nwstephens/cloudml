@@ -82,7 +82,7 @@ test <- format.rawdata(test_raw)
 * relationship
 * race
 * gender
-* native_country"
+* native_country
 
 ```{r}
 plot.main.effects <- function(data, x, y){

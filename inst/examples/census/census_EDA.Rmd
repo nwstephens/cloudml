@@ -18,9 +18,10 @@ Predict whether income exceeds $50K/yr based on census data. Also known as "Adul
 * then perhaps an Rmd making predictions
 * then perhaps a Shiny app making predictions
 
-**Notes:**
+# Notes
 * it would be cool if we used plotly as that would give us some very nice interactive artifcats
 * Important: The training in the demo will occur as an async cloudml job rather than something that happens inline in an Rmd.
+* The big drivers are: marital status, education, and sex
 
 ```{r setup, message=FALSE}
 library(tidyverse)
@@ -41,7 +42,7 @@ download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/a
 
 # Read Data
 
-```{r}
+```{r, message=FALSE}
 col_names = c(
   "age", "workclass", "fnlwgt", "education", "education_num",
   "marital_status", "occupation", "relationship", "race", "gender",
@@ -50,7 +51,7 @@ col_names = c(
 )
 
 train_raw <- read_csv("train_file", col_names = col_names, na = "?")
-test_raw  <- read_csv("train_file", col_names = col_names, na = "?")
+test_raw  <- read_csv("test_file", col_names = col_names, na = "?", skip = 1)
 ```
 
 # Create modeling data
@@ -58,19 +59,21 @@ test_raw  <- read_csv("train_file", col_names = col_names, na = "?")
 ```{r}
 format.rawdata <- function(data){
   data %>%
-    mutate(label = ifelse(income_bracket == ">50K", 1, 0)) %>%
+    mutate(label = ifelse(income_bracket == ">50K" | income_bracket == ">50K.", 1, 0)) %>%
     mutate(age_buckets = cut(age, c(16, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 90))) %>%
-    mutate(education_x_occupation = paste(education, occupation, sep = ":")) %>%
-    mutate(age_buckets_x_education_x_occupation = paste(age_buckets, education, occupation, sep = ":")) %>%
-    select(label, gender, native_country, education, occupation, workclass, marital_status, 
-           race, age_buckets, education_x_occupation, age_buckets_x_education_x_occupation,
-           education_num) %>%
+    select(label, gender, native_country, education, education_num, occupation, workclass, marital_status, 
+           race, age_buckets) %>%
     na.omit
 }
 
-train <- format.rawdata(train_raw)
-test <- format.rawdata(test_raw)
+create.interactions <- function(data){
+  data %>%
+    mutate(education_x_occupation = paste(education, occupation, sep = ":")) %>%
+    mutate(age_buckets_x_education_x_occupation = paste(age_buckets, education, occupation, sep = ":"))
+}
 
+train <- train_raw %>% format.rawdata #%>% create.interactions
+test  <- test_raw  %>% format.rawdata #%>% create.interactions
 ```
 
 # Plot categorical columns
@@ -162,7 +165,6 @@ ggplotly(p)
 
 ```
 
-
 ## Train Model
 
 Gender, education, and marital status are all highly significant. Marrital status in particular is a good predictor of those earning more than $50k.
@@ -171,13 +173,13 @@ Gender, education, and marital status are all highly significant. Marrital statu
 m1 <- glm(label ~ gender + native_country + education + occupation + workclass + marital_status +  
          race + age_buckets, binomial, train)
 summary(m1)
-anova(m1) # takes a while to run
+#anova(m1) # takes a while to run
 plot(m1)
 ```
 
 ## Predict
 
-The high area under the curve (AUC) of 0.9 is an indicator that this model is probably overfitting. 
+The high area under the curve (AUC) of 0.883 is an indicator that this model is probably overfitting. 
 
 ```{r}
 test %>%
@@ -188,8 +190,44 @@ test %>%
 
 ## Regularize
 
+Fit an elastic net (regularized) model that includes L1 and L2 penalties.
+
 ```{r}
-# use L1 and L2 elastic net
+# Convert to factors
+alldata <- bind_rows("train" = train, "test" = test, .id = "data") %>%
+  select(-education_num) %>%
+  mutate_each(., funs(factor(.))) %>%
+  model.matrix( ~ ., .)
+
+# Create training prediction matrix
+train.factors <- list(x = alldata[alldata[,'datatrain'] == 1, -(1:3)],
+                     y = alldata[alldata[,'datatrain'] == 1, 3])
+
+# Create test prediction matrix
+test.factors <- list(x = alldata[alldata[,'datatrain'] == 0, -(1:3)],
+                    y = alldata[alldata[,'datatrain'] == 0, 3])
+
+# Fit a regularized model
+fit1 <- glmnet(train.factors$x, train.factors$y, "binomial")
+plot(fit1)
+print(fit1)
+coef(fit1, s = 0.03) # extract coefficients at a single value of lambda
+
+# Cross validation (long running for full dataset)
+#cvfit <- cv.glmnet(train.factors$x, train.factors$y, family = "binomial", type.measure = "class")
+#plot(cvfit)
+#cvfit$lambda.min # 0.0001971255
+
+# Predict and plot the AUC
+test.factors$pred <- predict.glmnet(fit1, test.factors$x, s=0.02) # make predictions
+data.frame(resp = test.factors$y, pred = c(test.factors$pred)) %>%
+  roc(resp ~ pred, .) %>%
+  plot.roc(., print.auc = TRUE)
 ```
 
-## Make shiny app
+## Make shiny apps
+
+* Gadget: Calculator that takes the formula only and spits out a prediction.
+* App: Training the model based on selected input. Spits out an ROC curve.
+* Dashboard: Profiler that helps you understand who is most likely to earn more than $50k
+

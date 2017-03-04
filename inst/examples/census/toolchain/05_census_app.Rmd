@@ -1,0 +1,2 @@
+# Placeholder for a shiny app
+# Select which columns to include in the analysis. Hit the run button and build a new model. Output will be the ANOVA table and lift chart.

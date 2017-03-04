@@ -1,0 +1,3 @@
+# Shiny gadget place holder.
+# Use the function from the logistic model and inputs from the shiny ui to predict the likelihood of a single individual earning more than $50k
+# Include prediction interval

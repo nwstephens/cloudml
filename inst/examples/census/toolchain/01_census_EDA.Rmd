@@ -26,23 +26,26 @@ Predict whether income exceeds $50K/yr based on census data. Also known as "Adul
 ```{r setup, message=FALSE}
 library(tidyverse)
 library(plotly)
-library(pROC)
-library(glmnet)
 ```
 
 # Download
 
-```{r, eval=FALSE}
-download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", "train_file")
-download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test", "test_file")
+```{r, eval=FALSE, message=FALSE}
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data",
+              "data/train_raw.csv")
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test", 
+              "data/test_raw.csv")
+```
 
-#download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.data", "train_file")
-#download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.test", "test_file")
+```{r, eval=FALSE, include=FALSE}
+# Alternative download location
+#download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.data", "data/train_raw.csv")
+#download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.test", "data/test_raw.csv")
 ```
 
 # Read Data
 
-```{r, message=FALSE}
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
 col_names = c(
   "age", "workclass", "fnlwgt", "education", "education_num",
   "marital_status", "occupation", "relationship", "race", "gender",
@@ -50,8 +53,8 @@ col_names = c(
   "income_bracket"
 )
 
-train_raw <- read_csv("train_file", col_names = col_names, na = "?")
-test_raw  <- read_csv("test_file", col_names = col_names, na = "?", skip = 1)
+train_raw <- read_csv("data/train_raw.csv", col_names = col_names, na = "?")
+test_raw  <- read_csv("data/test_raw.csv", col_names = col_names, na = "?", skip = 1)
 ```
 
 # Create modeling data
@@ -115,13 +118,6 @@ plot.main.effects(train, "education", "label")
 * hours_per_week
 
 ```{r}
-train_raw %>%
-  na.omit %>%
-  select(income_bracket, age, education_num, capital_gain, capital_loss, hours_per_week) %>%
-  gather(column, val, -income_bracket) %>%
-  filter(column == "age") %>%
-  ggplot(aes(val, fill = income_bracket)) + geom_density()
-
 plot.continuous <- function(data, x, y, alpha = 0.2, ...){
   data %>%
     select_(groups = x, y = y) %>%
@@ -165,69 +161,10 @@ ggplotly(p)
 
 ```
 
-## Train Model
-
-Gender, education, and marital status are all highly significant. Marrital status in particular is a good predictor of those earning more than $50k.
+# Save
 
 ```{r}
-m1 <- glm(label ~ gender + native_country + education + occupation + workclass + marital_status +  
-         race + age_buckets, binomial, train)
-summary(m1)
-#anova(m1) # takes a while to run
-plot(m1)
+write_csv(train, "data/train.csv")
+write_csv(test, "data/test.csv")
 ```
-
-## Predict
-
-The high area under the curve (AUC) of 0.883 is an indicator that this model is probably overfitting. 
-
-```{r}
-test %>%
-  mutate(pred = predict(m1, ., type = "response")) %>%
-  roc(label ~ pred, .) %>%
-  plot.roc(., print.auc = TRUE) # maybe add accuracy like the TF example
-```
-
-## Regularize
-
-Fit an elastic net (regularized) model that includes L1 and L2 penalties.
-
-```{r}
-# Convert to factors
-alldata <- bind_rows("train" = train, "test" = test, .id = "data") %>%
-  select(-education_num) %>%
-  mutate_each(., funs(factor(.))) %>%
-  model.matrix( ~ ., .)
-
-# Create training prediction matrix
-train.factors <- list(x = alldata[alldata[,'datatrain'] == 1, -(1:3)],
-                     y = alldata[alldata[,'datatrain'] == 1, 3])
-
-# Create test prediction matrix
-test.factors <- list(x = alldata[alldata[,'datatrain'] == 0, -(1:3)],
-                    y = alldata[alldata[,'datatrain'] == 0, 3])
-
-# Fit a regularized model
-fit1 <- glmnet(train.factors$x, train.factors$y, "binomial")
-plot(fit1)
-print(fit1)
-coef(fit1, s = 0.03) # extract coefficients at a single value of lambda
-
-# Cross validation (long running for full dataset)
-#cvfit <- cv.glmnet(train.factors$x, train.factors$y, family = "binomial", type.measure = "class")
-#plot(cvfit)
-#cvfit$lambda.min # 0.0001971255
-
-# Predict and plot the AUC
-test.factors$pred <- predict.glmnet(fit1, test.factors$x, s=0.02) # make predictions
-data.frame(resp = test.factors$y, pred = c(test.factors$pred)) %>%
-  roc(resp ~ pred, .) %>%
-  plot.roc(., print.auc = TRUE)
-```
-
-## Make shiny apps
-
-* Gadget: Calculator that takes the formula only and spits out a prediction.
-* App: Training the model based on selected input. Spits out an ROC curve.
-* Dashboard: Profiler that helps you understand who is most likely to earn more than $50k
 

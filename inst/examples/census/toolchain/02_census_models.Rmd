@@ -1,0 +1,126 @@
+---
+title: "Census Data Analysis"
+output: html_notebook
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(plotly)
+library(pROC)
+library(glmnet)
+
+train <- read_csv("data/train.csv")
+test <- read_csv("data/test.csv")
+```
+
+# Logistic Regression
+
+## Train Model
+
+Gender, education, and marital status are all highly significant. Marrital status in particular is a good predictor of those earning more than $50k.
+
+```{r}
+m1 <- glm(label ~ gender + native_country + education + occupation + workclass + marital_status +  
+         race + age_buckets, binomial, train)
+summary(m1)
+#anova(m1) # takes a while to run
+#plot(m1) # legacy plots not that useful
+```
+
+## Predict
+
+The high area under the curve (AUC) of 0.883 is an indicator that this model is probably overfitting. 
+
+```{r}
+# Predict
+pred <- bind_rows("train" = train, "test" = test, .id = "data") %>%
+  mutate(pred = predict(m1, ., type = "response")) %>%
+  mutate(decile = ntile(desc(pred), 10)) %>%
+  select(data, label, pred, decile)
+
+# ROC plot
+pred %>%
+  filter(data == "test") %>%
+  roc(label ~ pred, .) %>%
+  plot.roc(., print.auc = TRUE) # maybe add accuracy like the TF example
+
+# Lift plot
+p <- pred %>%
+  group_by(data, decile) %>%
+  summarize(percent = 100 * mean(label)) %>%
+  ggplot(aes(decile, percent, fill = data)) + geom_bar(stat = "Identity", position = "dodge") +
+  ggtitle("Lift chart for logistic regression model")
+ggplotly(p)
+```
+
+# Elastic net
+
+## Train model
+
+Fit an elastic net (regularized) model that includes L1 and L2 penalties.
+
+```{r}
+# Convert to factors
+alldata <- bind_rows("train" = train, "test" = test, .id = "data") %>%
+  select(-education_num) %>%
+  mutate_each(., funs(factor(.))) %>%
+  model.matrix( ~ ., .)
+
+# Create training prediction matrix
+train.factors <- list(x = alldata[alldata[,'datatrain'] == 1, -(1:3)],
+                     y = alldata[alldata[,'datatrain'] == 1, 3])
+
+# Create test prediction matrix
+test.factors <- list(x = alldata[alldata[,'datatrain'] == 0, -(1:3)],
+                    y = alldata[alldata[,'datatrain'] == 0, 3])
+
+# Fit a regularized model
+fit1 <- glmnet(train.factors$x, train.factors$y, "binomial")
+plot(fit1)
+print(fit1)
+coef(fit1, s = 0.03) # extract coefficients at a single value of lambda
+```
+
+## Predict
+
+```{r, eval=FALSE}
+# Cross validation (long running for full dataset)
+cvfit <- cv.glmnet(train.factors$x, train.factors$y, family = "binomial", type.measure = "class")
+plot(cvfit)
+cvfit$lambda.min # 0.0001971255
+```
+
+```{r}
+# Predict and plot the AUC
+test.factors$pred <- predict.glmnet(fit1, test.factors$x, s=0.02) # make predictions
+data.frame(resp = test.factors$y, pred = c(test.factors$pred)) %>%
+  roc(resp ~ pred, .) %>%
+  plot.roc(., print.auc = TRUE)
+
+# Lift chart
+p <- data.frame(data = ifelse(alldata[, 'datatrain'], "train", "test"),
+           label = alldata[,'label1'],
+           pred = c(predict.glmnet(fit1, alldata[, -(1:3)], s=0.02))) %>%
+  mutate(decile = ntile(desc(pred), 10)) %>%
+  group_by(data, decile) %>%
+  summarize(percent = 100 * mean(label)) %>%
+  ggplot(aes(decile, percent, fill = data)) + geom_bar(stat = "Identity", position = "dodge") +
+  ggtitle("Lift chart for elastic net model")
+ggplotly(p)
+```
+
+# Save
+
+```{r}
+# Score predictions
+pred.out <- test %>%
+  mutate(pred = predict(m1, ., type = "response")) %>%
+  mutate(decile = ntile(desc(pred), 10)) %>%
+  mutate(income_bracket = ifelse(label, ">50K", "<=50K")
+)
+
+# Output predictions to file
+write_csv(pred.out, "data/pred.csv")
+save(m1, file = "data/logisticModel.Rdata")
+```
+

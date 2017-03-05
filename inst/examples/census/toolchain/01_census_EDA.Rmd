@@ -1,6 +1,8 @@
 ---
 title: "Census Data Exploratory Analysis"
-output: html_notebook
+output:
+  html_document: default
+  html_notebook: default
 ---
 
 ## Overview
@@ -11,7 +13,8 @@ Predict whether income exceeds \$50K/yr based on census data. Also known as "Adu
 
 The biggest drivers for predicting income over \$50k are: marital status (married is better), education (more is better), and sex (male is better). We will explore the continuous and categorical predictors before building statistical models. Data manipulation is carried out in `dplyr` and visualizations are done in `ggplot2` and `plotly`.
 
-```{r setup, message=FALSE}
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 library(tidyverse)
 library(plotly)
 ```
@@ -20,7 +23,7 @@ library(plotly)
 
 The data can be downloaded from the web. The training and test data are 3.8 MB and 1.9 MB respectively. The missing values are converted from `?` to `NA`.
 
-```{r, eval=FALSE, message=FALSE}
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
 download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data",
               "data/train_raw.csv")
 download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test", 
@@ -93,7 +96,7 @@ plot.main.effects <- function(data, x, y){
     coord_flip() +
     labs(y = "Percent", x = "") +
     ggtitle(paste("Percent surveyed with incomes over $50k by", x))
-  ggplotly(p)
+  ggplotly(p, tooltip = "percent")
 }
 
 plot.main.effects(train, "marital_status", "label")
@@ -112,13 +115,14 @@ We can compare the distribution of the categorical variables for those who earn 
 * hours_per_week
 
 ```{r}
-plot.continuous <- function(data, x, y, alpha = 0.2, ...){
+plot.continuous <- function(data, x, y, alpha = 0.2, ...){ 
+  lab <- stringr::str_replace_all(y, "_", " ") %>% stringr::str_to_title(y)
   data %>%
     select_(groups = x, y = y) %>%
     na.omit %>%
     ggplot(aes(y, fill = groups)) + geom_density(alpha = alpha, ...) +
-    labs(x = y, y = "") +
-    ggtitle(paste(y, "by", x))
+    labs(x = lab, y = "") +
+    ggtitle(paste0("Income by ", lab))
 }
 
 # People who earn more also work more, are better educated, and are older

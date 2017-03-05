@@ -1,34 +1,24 @@
 ---
-title: "Census Data Analysis"
+title: "Census Data Exploratory Analysis"
 output: html_notebook
 ---
 
-# Overview
+## Overview
 
-Predict whether income exceeds $50K/yr based on census data. Also known as "Adult" dataset.
+Predict whether income exceeds \$50K/yr based on census data. Also known as "Adult" dataset. Extraction was done by Barry Becker from the 1994 Census database. Prediction task is to determine whether a person makes over 50K a year. See the [data source](https://archive.ics.uci.edu/ml/datasets/Census+Income) and [description](https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.names) for more information. These data are also used for demonstrating [Tensorflow](https://www.tensorflow.org/tutorials/wide).
 
-* 1994 Study
-* [Tensorflow](https://www.tensorflow.org/tutorials/wide)
-* [Data source](https://archive.ics.uci.edu/ml/datasets/Census+Income)
-* [Data description](https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.names)
+## Exploratory data analysis
 
-# Outline
-
-* an Rmd for visualizations/EDA of the raw dataset
-* then perhaps an Rmd making predictions
-* then perhaps a Shiny app making predictions
-
-# Notes
-* it would be cool if we used plotly as that would give us some very nice interactive artifcats
-* Important: The training in the demo will occur as an async cloudml job rather than something that happens inline in an Rmd.
-* The big drivers are: marital status, education, and sex
+The biggest drivers for predicting income over \$50k are: marital status (married is better), education (more is better), and sex (male is better). We will explore the continuous and categorical predictors before building statistical models. Data manipulation is carried out in `dplyr` and visualizations are done in `ggplot2` and `plotly`.
 
 ```{r setup, message=FALSE}
 library(tidyverse)
 library(plotly)
 ```
 
-# Download
+## Download and read the data
+
+The data can be downloaded from the web. The training and test data are 3.8 MB and 1.9 MB respectively. The missing values are converted from `?` to `NA`.
 
 ```{r, eval=FALSE, message=FALSE}
 download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data",
@@ -43,8 +33,6 @@ download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/a
 #download.file("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.test", "data/test_raw.csv")
 ```
 
-# Read Data
-
 ```{r, message=FALSE, echo=FALSE, warning=FALSE}
 col_names = c(
   "age", "workclass", "fnlwgt", "education", "education_num",
@@ -57,7 +45,9 @@ train_raw <- read_csv("data/train_raw.csv", col_names = col_names, na = "?")
 test_raw  <- read_csv("data/test_raw.csv", col_names = col_names, na = "?", skip = 1)
 ```
 
-# Create modeling data
+## Create modeling data
+
+Convert the target variable `income_bracket` into a numeric value. Create a new column `age_buckets` and remove records with missing values. Apply to both the test and training data. Create interactions if desired. Note: These interactions can be extremely time consuming to model, therefore they are examined here, but are not included in the predictive models.
 
 ```{r}
 format.rawdata <- function(data){
@@ -79,7 +69,9 @@ train <- train_raw %>% format.rawdata #%>% create.interactions
 test  <- test_raw  %>% format.rawdata #%>% create.interactions
 ```
 
-# Plot categorical columns
+## Plot categorical columns
+
+Most of the columns in the census data are categorical. We plot a few of the most important columns here. The complete list of categorical columns are:
 
 * workclass
 * education
@@ -97,7 +89,7 @@ plot.main.effects <- function(data, x, y){
     group_by(group) %>%
     summarize(percent = 100 * mean(metric)) %>%
     ggplot(aes(x = reorder(group, percent), percent)) +
-    geom_bar(stat="identity") +
+    geom_bar(stat="identity", fill = "lightblue4") +
     coord_flip() +
     labs(y = "Percent", x = "") +
     ggtitle(paste("Percent surveyed with incomes over $50k by", x))
@@ -109,7 +101,9 @@ plot.main.effects(train, "gender", "label")
 plot.main.effects(train, "education", "label")
 ```
 
-# Plot continuous columns
+## Plot continuous columns
+
+We can compare the distribution of the categorical variables for those who earn more than \$50k and those who earn less. The complete list of categorical variables are:
 
 * age
 * education_num
@@ -135,7 +129,9 @@ plot.continuous(train_raw, "income_bracket", "hours_per_week", adjust = 5)
 ```
 
 
-# Plot interactions
+## Plot interactions
+
+We can examine some two-way and three-way intearcations with choropleth maps:
 
 ```{r}
 p <- train %>%
@@ -161,7 +157,9 @@ ggplotly(p)
 
 ```
 
-# Save
+## Save
+
+Finally, we save the test and training data so we can use them in susequent analysis.
 
 ```{r}
 write_csv(train, "data/train.csv")

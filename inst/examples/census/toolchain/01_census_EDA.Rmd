@@ -1,8 +1,8 @@
 ---
 title: "Census Data Exploratory Analysis"
 output:
-  html_document: default
   html_notebook: default
+  html_document: default
 ---
 
 ## Overview

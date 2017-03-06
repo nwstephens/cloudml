@@ -48,7 +48,7 @@ pred <- bind_rows("train" = train, "test" = test, .id = "data") %>%
 pred %>%
   filter(data == "test") %>%
   roc(label ~ pred, .) %>%
-  plot.roc(., print.auc = TRUE) # maybe add accuracy like the TF example
+  plot.roc(., print.auc = TRUE)
 
 # Lift plot
 p <- pred %>%
@@ -86,7 +86,7 @@ test.factors <- list(x = alldata[alldata[,'datatrain'] == 0, -(1:3)],
                     y = alldata[alldata[,'datatrain'] == 0, 3])
 
 # Fit a regularized model
-fit1 <- glmnet(train.factors$x, train.factors$y, "binomial")
+fit1 <- glmnet(train.factors$x, train.factors$y, family = "binomial")
 plot(fit1)
 print(fit1)
 (m2 <- coef.glmnet(fit1, s = 0.02)) # extract coefficients at a single value of lambda
@@ -105,7 +105,7 @@ Once you have chosen a value for `lambda` you can score the test set and examine
 
 ```{r}
 # Predict and plot the AUC
-test.factors$pred <- predict.glmnet(fit1, test.factors$x, s=0.02, type = "response") # make predictions
+test.factors$pred <- predict(fit1, test.factors$x, s=0.02, type = "response") # make predictions
 data.frame(resp = test.factors$y, pred = c(test.factors$pred)) %>%
   roc(resp ~ pred, .) %>%
   plot.roc(., print.auc = TRUE)

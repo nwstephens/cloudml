@@ -29,7 +29,7 @@ n <- nrow(pred_raw)
 Inputs {.sidebar}
 =======================================================================
 
-Who are the people likely to make over \$50k? Use the cutoff slider to profile individuals more or less likely to earn over \$50k in yearly income. Data are from the 1994-1995 population surveys conducted by the U.S. Census Bureau. [source](https://archive.ics.uci.edu/ml/datasets/Census+Income)
+Who are the people likely to make over \$50k? Use the cutoff slider to profile individuals more or less likely to earn over \$50k in yearly income. Data are from the 1994-1995 population surveys conducted by the U.S. Census Bureau. [data source](https://archive.ics.uci.edu/ml/datasets/Census+Income)
 
 ```{r}
 sliderInput("cutoff", label = "Predicted probability cutoff",
@@ -74,11 +74,11 @@ pred.window <- reactive({
   pred()[j1:j2, ]
 })
 
-renderPrint({
-  cat("Number of responders:", nrow(pred.window()), "\n")
-  cat("Lower bound:", min(pred.window()$pred), "\n")
-  cat("Upper bound:", max(pred.window()$pred))
-})
+# renderPrint({
+#   cat("Number of responders:", nrow(pred.window()), "\n")
+#   cat("Lower bound:", min(pred.window()$pred), "\n")
+#   cat("Upper bound:", max(pred.window()$pred))
+# })
 
 # confusion matrix
 confusion.matrix <- reactive({

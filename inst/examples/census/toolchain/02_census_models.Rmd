@@ -89,7 +89,7 @@ test.factors <- list(x = alldata[alldata[,'datatrain'] == 0, -(1:3)],
 fit1 <- glmnet(train.factors$x, train.factors$y, "binomial")
 plot(fit1)
 print(fit1)
-coef.glmnet(fit1, s = 0.03) # extract coefficients at a single value of lambda
+(m2 <- coef.glmnet(fit1, s = 0.02)) # extract coefficients at a single value of lambda
 ```
 
 ```{r, eval=FALSE}
@@ -105,7 +105,7 @@ Once you have chosen a value for `lambda` you can score the test set and examine
 
 ```{r}
 # Predict and plot the AUC
-test.factors$pred <- predict.glmnet(fit1, test.factors$x, s=0.02) # make predictions
+test.factors$pred <- predict.glmnet(fit1, test.factors$x, s=0.02, type = "response") # make predictions
 data.frame(resp = test.factors$y, pred = c(test.factors$pred)) %>%
   roc(resp ~ pred, .) %>%
   plot.roc(., print.auc = TRUE)
@@ -129,14 +129,14 @@ Finally, save the predicted output and the model for building apps.
 ```{r}
 # Score predictions
 pred.out <- test %>%
-  mutate(pred = predict(m1, ., type = "response")) %>%
-  mutate(decile = ntile(desc(pred), 10)) %>%
+  mutate(pred.glm = pred$pred[pred$data == "test"]) %>%
+  mutate(pred.net = c(test.factors$pred)) %>%
   mutate(income_bracket = ifelse(label, ">50K", "<=50K")
 )
 
 # Output predictions to file
 write_csv(pred.out, "data/pred.csv")
-save(m1, file = "data/logisticModel.Rdata")
 saveRDS(m1, file = "data/logisticModel.rds")
+saveRDS(m2, file = "data/elasticnetModel.rds")
 ```
 

@@ -28,7 +28,7 @@ ui <- pageWithSidebar(
   sidebarPanel(
     selectizeInput('selfeatures', 'Select Features:', features, multiple = TRUE),
     sliderInput('cutoff', 'Cutoff Value', min = 0, max = 1, value = 0.5),
-    actionButton('fit', "Add Model")
+    actionButton('fit', "Build Model")
   ),
   mainPanel(
     plotOutput("lift"),
@@ -42,7 +42,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$fit, {
     withProgress(message = "Working...", value = 0.1, {
-      incProgress(0.25, detail = "Fitting Tensorflow Model")
+      incProgress(0.25, detail = "Fitting GLM Model")
       f <- paste("label ~ ", paste(input$selfeatures, collapse= "+"))
       model <- glm(as.formula(f), binomial, train)
 
